@@ -1,221 +1,302 @@
 package xiaojin.gachaaddiction.config;
 
-import net.minecraft.resources.ResourceLocation;
+import com.mojang.logging.LogUtils;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.slf4j.Logger;
 import xiaojin.gachaaddiction.api.GachaType;
-import net.neoforged.neoforge.common.ModConfigSpec;
-import xiaojin.gachaaddiction.config.entry.*;
-import xiaojin.gachaaddiction.config.filter.FilterRuleMatcher;
-import xiaojin.gachaaddiction.config.filter.FilterRuleParser;
-import xiaojin.gachaaddiction.registry.GachaTypes;
+import xiaojin.gachaaddiction.config.ConfigValue.BooleanValue;
+import xiaojin.gachaaddiction.config.ConfigValue.DoubleValue;
+import xiaojin.gachaaddiction.config.ConfigValue.IntValue;
+import xiaojin.gachaaddiction.init.GachaTypes;
+import xiaojin.gachaaddiction.util.GachaaPatterns;
+import xiaojin.gachaaddiction.util.RarityUtil;
 
 import java.util.ArrayList;
-import java.util.Objects;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 
 public class ClientConfig extends BasicConfig {
-    private static final String WHITELIST_COMMENT = "Items matched by this list trigger the gacha animation and take priority over the blacklist.";
-    private static final String BLACKLIST_COMMENT = "Items matched by this list do not trigger the gacha animation.";
-    private static final String COMPOUND_RULE_COMMENT = "Separate compound conditions with ; and compare rarity with <1, =1, >1, <=1, or >=1.";
-    private static final String TAG_RULE_COMMENT = "Match item tags with #minecraft:block and exclude tags with !#.";
-    private static final String ITEM_RULE_COMMENT = "Use vanilla item command syntax and exclude items with !.";
-    private static final String RARITY_SORTING_COMMENT = "Sort rewards by rarity when enabled.";
-    private static final String REWARD_SOUND_OPTIMIZATION_COMMENT = "Only play the highest-rarity reward sound when multiple rewards appear together.";
-    private static final String FTB_QUESTS_GACHA_COMMENT = "Open the gacha screen for FTB Quest rewards even when the quest does not enable it.";
-    private static final String DEFAULT_GACHA_TYPE_COMMENT = "Use this type when the gacha screen type is not defined.";
-    private static final String PASS_SOUND_OPTIMIZATION_COMMENT = "Only play the passing sound from one reel at a time.";
+    public static final Logger LOGGER = LogUtils.getLogger();
+
 
     //region 抽奖屏幕
-    public final FilterListConfigEntry whitelistFilterList;
-    public final FilterListConfigEntry blacklistFilterList;
+    public final ConfigValue<List<? extends String>> whitelistFilterList;
+    public final ConfigValue<List<? extends String>> blacklistFilterList;
     /**
      * 合并物品
      */
-    public final BooleanConfigEntry mergeItem;
+    public final BooleanValue mergeItem;
     /**
      * 稀有度排序
      */
-    public final BooleanConfigEntry raritySorting;
+    public final BooleanValue raritySorting;
     /**
      * 奖品音效
      */
-    public final BooleanConfigEntry rewardSoundEffects;
+    public final BooleanValue rewardSoundEffects;
     /**
      * 奖品音效优化
      */
-    public final BooleanConfigEntry rewardSoundEffectsOptimize;
+    public final BooleanValue rewardSoundEffectsOptimize;
     /**
      * 开启FTB任务抽奖的抽奖屏幕
      */
-    public final BooleanConfigEntry ftbQuestsGachaa;
+    public final BooleanValue ftbQuestsGachaa;
     /**
      * 默认抽奖屏幕类型
      */
-    public final SelectorConfigEntry<GachaType> defaultGachaaType;
+    public final ConfigValue<String> defaultGachaaType;
     /**
      * 老虎机配置
      */
     public final SlotMachineConfig slotMachineConfig;
     //endregion
 
-    public ClientConfig(ModConfigSpec.Builder builder) {
-        super(builder);
+    public ClientConfig(ConfigSpec spec) {
+        super(spec);
         //region 抽奖屏幕
         push("gachaa_screen");
-        whitelistFilterList = defineFilterList(new ArrayList<>(), ClientConfig::testCondition, "whitelist_filter_list",
-                WHITELIST_COMMENT, COMPOUND_RULE_COMMENT, TAG_RULE_COMMENT, ITEM_RULE_COMMENT);
-        blacklistFilterList = defineFilterList(new ArrayList<>(), ClientConfig::testCondition, "blacklist_filter_list",
-                BLACKLIST_COMMENT, COMPOUND_RULE_COMMENT, TAG_RULE_COMMENT, ITEM_RULE_COMMENT);
+        whitelistFilterList = defineList(new ArrayList<>(), "whitelist_filter_list", ClientConfig::test,
+                "被这个列表匹配的物品将会触发抽奖动画，优先级大于黑名单",
+                "可使用稀有度比较 <1 =1 >1 <=1 >=1",
+                "物品标签比较 #minecraft:block",
+                "物品id比较 minecraft:acacia_planks");
+        blacklistFilterList = defineList(new ArrayList<>(), "blacklist_filter_list", ClientConfig::test,
+                "被这个列表匹配的物品将不会触发抽奖动画",
+                "可使用稀有度比较 <1 =1 >1 <=1 >=1",
+                "物品标签比较 #minecraft:block",
+                "物品id比较 minecraft:acacia_planks");
         mergeItem = define(true, "merge_item");
-        raritySorting = define(true, "rarity_sorting", RARITY_SORTING_COMMENT);
+        raritySorting = define(true, "rarity_sorting", "开启后按稀有度排序");
         rewardSoundEffects = define(true, "reward_sound_effects");
-        rewardSoundEffectsOptimize = define(true, "reward_sound_effects_optimize", REWARD_SOUND_OPTIMIZATION_COMMENT);
-        ftbQuestsGachaa = define(true, "ftb_quests_gachaa", FTB_QUESTS_GACHA_COMMENT);
-        defaultGachaaType = selectorDefine(GachaTypes.SLOT_MACHINE,
-                GachaTypes.getLiat(), "default_gachaas_type",
-                v -> Objects.requireNonNull(GachaTypes.get(ResourceLocation.parse(v))),
-                v -> Objects.requireNonNull(Objects.requireNonNull(v).getId()).toString(),
-                DEFAULT_GACHA_TYPE_COMMENT);
-        slotMachineConfig = new SlotMachineConfig(this);
+        rewardSoundEffectsOptimize = define(true, "reward_sound_effects_optimize", "开启后同时只出现一次获得奖品的音效，并只播放最高的");
+        ftbQuestsGachaa = define(true, "ftb_quests_gachaa", "开启后FTB任务中就算没有开启也会开启抽奖界面");
+        defaultGachaaType = defineInList("default_gachaas_type", GachaTypes.SLOT_MACHINE.getId().toString(),
+                () -> GachaTypes.getLiat().stream().map(t -> t.getId().toString()).toList(),
+                "当抽奖屏幕没有定义时将使用这个类型");
+        slotMachineConfig = new SlotMachineConfig(spec);
         pop();
         //endregion
     }
 
-    private static boolean testCondition(Object obj) {
-        return obj instanceof String condition && FilterRuleParser.isValidCondition(condition);
+    /** 取值必须落在候选列表内，否则回退默认值。候选列表延迟求值，避免类初始化顺序问题。 */
+    private ConfigValue<String> defineInList(String key, String defaultValue,
+                                             java.util.function.Supplier<List<String>> allowed, String... comment) {
+        return new ConfigValue.Validated<>(spec, pathOf(key), defaultValue,
+                comment.length == 0 ? "" : String.join(" / ", comment),
+                value -> value instanceof String s && allowed.get().contains(s));
+    }
+
+    private static boolean test(Object obj) {
+        if (!(obj instanceof String v)) {
+            return false;
+        }
+        return GachaaPatterns.TAG_PATTERN.matcher(v).matches() || GachaaPatterns.ID_PATTERN.matcher(v).matches() || GachaaPatterns.OPERATOR_RARITY_PATTERN.matcher(v).matches();
     }
 
     public GachaType getDefaultGachaaType() {
-        return defaultGachaaType.get();
+        return GachaTypes.getDefault(Identifier.parse(defaultGachaaType.get()));
     }
 
     // 不是被过滤
     public boolean filter(ItemStack itemStack) {
         if (!whitelistFilterList.get().isEmpty()) {
-            if (FilterRuleMatcher.matches(itemStack, whitelistFilterList.get())) {
+            if (filter(itemStack, whitelistFilterList.get())) {
                 return true;
             }
         }
         if (!blacklistFilterList.get().isEmpty()) {
-            return !FilterRuleMatcher.matches(itemStack, blacklistFilterList.get());
+            return !filter(itemStack, blacklistFilterList.get());
         }
         return true;
     }
 
-    public static class SlotMachineConfig {
+    public static boolean filter(ItemStack itemStack, List<? extends String> list) {
+        if (list.isEmpty() || itemStack.isEmpty()) {
+            return false;
+        }
+
+        for (String v : list) {
+            if (v == null || v.isEmpty() || !ClientConfig.test(v)) {
+                continue;
+            }
+
+            if (v.startsWith("#") && GachaaPatterns.TAG_PATTERN.matcher(v).matches()) {
+                Identifier key = Identifier.parse(v.substring(1));
+                if (itemStack.typeHolder().tags().noneMatch(itemTagKey -> itemTagKey.location().equals(key))) {
+                    return false;
+                }
+                continue;
+            }
+
+            if (GachaaPatterns.OPERATOR_RARITY_PATTERN.matcher(v).matches()) {
+                try {
+                    if (!evaluate(v, RarityUtil.getRarityLevel(itemStack))) {
+                        return false;
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+                continue;
+            }
+
+            if (GachaaPatterns.ID_PATTERN.matcher(v).matches()) {
+                Identifier key = Identifier.parse(v);
+                Item item = BuiltInRegistries.ITEM.getValue(key);
+                if (item != itemStack.getItem()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public static boolean evaluate(String constraint, double value) {
+        String s = constraint.replaceAll("\\s+", "");
+
+        Pattern p = Pattern.compile("^(>=|<=|>|<|=)(-?\\d+)$");
+        Matcher m = p.matcher(s);
+
+        if (!m.find()) {
+            LOGGER.error("约束格式错误，必须为：运算符+整数，例如 \"<=11\": {}", constraint);
+            return false;
+        }
+
+        String op = m.group(1);
+
+        int threshold = Integer.parseInt(m.group(2));
+
+        return switch (op) {
+            case ">" -> value > threshold;
+            case "<" -> value < threshold;
+            case ">=" -> value >= threshold;
+            case "<=" -> value <= threshold;
+            case "=" -> value == threshold;
+            default -> {
+                LOGGER.error("不支持的运算符：{}", op);
+                yield false;
+            }
+        };
+    }
+
+    public static class SlotMachineConfig extends BasicConfig {
         /**
          * 退出动画：每 tick 的进度推进量
          */
-        public final DoubleConfigEntry exitSpeed;
+        public final DoubleValue exitSpeed;
         /**
          * 退出动画：最大放大倍率（1 + 此值）
          */
-        public final DoubleConfigEntry exitMaxScale;
+        public final DoubleValue exitMaxScale;
         /**
          * 拨片音效
          */
-        public final BooleanConfigEntry passSoundEffects;
+        public final BooleanValue passSoundEffects;
         /**
          * 拨片音效优化
          */
-        public final BooleanConfigEntry passSoundEffectsOptimize;
+        public final BooleanValue passSoundEffectsOptimize;
         //region 物品
         /**
          * 每秒经过的物品数量
          */
-        public final DoubleConfigEntry itemsPerSecond;
+        public final DoubleValue itemsPerSecond;
         /**
          * 物品垂直间距
          */
-        public final DoubleConfigEntry itemSpacing;
+        public final DoubleValue itemSpacing;
         /**
          * 可见物品数量
          */
-        public final IntConfigEntry itemVisibleCount;
+        public final IntValue itemVisibleCount;
         /**
          * 转盘槽位大小：decoy 生成数量范围和 result 插入位置的计算基准
          */
-        public final IntConfigEntry itemSlotSize;
+        public final IntValue itemSlotSize;
         /**
          * 物品最小透明度
          */
-        public final DoubleConfigEntry itemMinAlpha;
+        public final DoubleValue itemMinAlpha;
         /**
          * 物品最大透明度
          */
-        public final DoubleConfigEntry itemMaxAlpha;
+        public final DoubleValue itemMaxAlpha;
         //endregion
         //region 减速
         /**
          * 滚动减速区：距离结果还剩几个物品时开始减速
          */
-        public final DoubleConfigEntry decelZone;
+        public final DoubleValue decelZone;
         /**
          * 减速阶段最低速度倍率，防止完全停住
          */
-        public final DoubleConfigEntry decelZoneMinSpeed;
+        public final DoubleValue decelZoneMinSpeed;
         /**
          * 随机减速倍率范围：最低
          */
-        public final DoubleConfigEntry decelZoneVarianceMin;
+        public final DoubleValue decelZoneVarianceMin;
         /**
          * 随机减速倍率范围：最高
          */
-        public final DoubleConfigEntry decelZoneVarianceMax;
+        public final DoubleValue decelZoneVarianceMax;
         //endregion
         //region 速度
         /**
          * 随机速度倍率范围：最低
          */
-        public final DoubleConfigEntry speedVarianceMin;
+        public final DoubleValue speedVarianceMin;
         /**
          * 随机速度倍率范围：最高
          */
-        public final DoubleConfigEntry speedVarianceMax;
+        public final DoubleValue speedVarianceMax;
         /**
          * 随机最小速度倍率范围：最低
          */
-        public final DoubleConfigEntry minSpeedVarianceMin;
+        public final DoubleValue minSpeedVarianceMin;
         /**
          * 随机最小速度倍率范围：最高
          */
-        public final DoubleConfigEntry minSpeedVarianceMax;
-        //endregion
+        public final DoubleValue minSpeedVarianceMax;
 
-        SlotMachineConfig(BasicConfig config) {
-            //region 老虎机
-            config.push("slot_machine");
-            exitSpeed = config.define(0.1, 0.0, 1.0, "exit_speed");
-            exitMaxScale = config.define(0.6, 0.0, 5.0, "exit_max_scale");
-            passSoundEffects = config.define(true, "pass_sound_effects");
-            passSoundEffectsOptimize = config.define(false, "pass_sound_effects_optimize", PASS_SOUND_OPTIMIZATION_COMMENT);
-            //endregion
+        //endregion
+        private SlotMachineConfig(ConfigSpec spec) {
+            super(spec);
+            push("slot_machine");
+            exitSpeed = define(0.1, 0.0, 1.0, "exit_speed");
+            exitMaxScale = define(0.6, 0.0, 5.0, "exit_max_scale");
+            passSoundEffects = define(true, "pass_sound_effects");
+            passSoundEffectsOptimize = define(false, "pass_sound_effects_optimize", "开启后同时只出现一条滚动条的拨片音效");
             //region 物品
-            config.push("item");
-            itemsPerSecond = config.define(5.0, 0.1, 10, "items_per_second");
-            itemSpacing = config.define(18.0, 18.0, 100.0, "item_spacing");
-            itemVisibleCount = config.define(5, 1, 20, "visible_count");
-            itemSlotSize = config.define(5, 1, 10, "slot_size");
-            itemMinAlpha = config.define(0.0, 0.0, 1.0, "min_alpha");
-            itemMaxAlpha = config.define(1.0, 0.0, 1.0, "max_alpha");
-            config.pop();
+            push("item");
+            itemsPerSecond = define(5.0, 0.1, 10, "items_per_second");
+            itemSpacing = define(18.0, 18.0, 100.0, "item_spacing");
+            itemVisibleCount = define(5, 1, 20, "visible_count");
+            itemSlotSize = define(5, 1, 10, "slot_size");
+            itemMinAlpha = define(0.0, 0.0, 1.0, "min_alpha");
+            itemMaxAlpha = define(1.0, 0.0, 1.0, "max_alpha");
+            pop();
             //endregion
             //region 减速
-            config.push("decel_zone");
-            decelZone = config.define(4.0, 0.0, 100.0, "decel_zone");
-            decelZoneMinSpeed = config.define(0.05, 0.0, 1.0, "min_speed");
-            decelZoneVarianceMin = config.define(0.5, 0.0, 10.0, "decel_zone_variance_min");
-            decelZoneVarianceMax = config.define(1.5, 0.0, 10.0, "decel_zone_variance_max");
-            config.pop();
+            push("decel_zone");
+            decelZone = define(4.0, 0.0, 100.0, "decel_zone");
+            decelZoneMinSpeed = define(0.05, 0.0, 1.0, "min_speed");
+            decelZoneVarianceMin = define(0.5, 0.0, 10.0, "decel_zone_variance_min");
+            decelZoneVarianceMax = define(1.5, 0.0, 10.0, "decel_zone_variance_max");
+            pop();
             //endregion
             //region 速度
-            config.push("speed");
-            speedVarianceMin = config.define(0.5, 0.0, 10.0, "speed_variance_min");
-            speedVarianceMax = config.define(1.5, 0.0, 10.0, "speed_variance_max");
-            minSpeedVarianceMin = config.define(0.5, 0.0, 10.0, "min_speed_variance_min");
-            minSpeedVarianceMax = config.define(1.5, 0.0, 10.0, "min_speed_variance_max");
-            config.pop();
-            config.pop();
+            push("speed");
+            speedVarianceMin = define(0.5, 0.0, 10.0, "speed_variance_min");
+            speedVarianceMax = define(1.5, 0.0, 10.0, "speed_variance_max");
+            minSpeedVarianceMin = define(0.5, 0.0, 10.0, "min_speed_variance_min");
+            minSpeedVarianceMax = define(1.5, 0.0, 10.0, "min_speed_variance_max");
+            pop();
             //endregion
+            pop();
         }
     }
 }

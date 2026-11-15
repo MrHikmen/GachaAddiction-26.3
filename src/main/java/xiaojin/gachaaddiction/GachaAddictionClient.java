@@ -1,23 +1,48 @@
 package xiaojin.gachaaddiction;
 
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.ModList;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import xiaojin.gachaaddiction.client.compat.ldlib2.LDLib2Util;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener;
+import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
+import xiaojin.gachaaddiction.init.client.GachaTypeClients;
+import xiaojin.gachaaddiction.network.OpenGachaScreenPayload;
+import xiaojin.gachaaddiction.network.SyncGachaaDataPayload;
+import xiaojin.gachaaddiction.registry.GachaaAdictionConfigData;
 
-@Mod(value = GachaAddiction.MODID, dist = Dist.CLIENT)
-public class GachaAddictionClient {
-    public GachaAddictionClient(IEventBus modEventBus, ModContainer container) {
-        IConfigScreenFactory iExtensionPoint;
-        if (ModList.get().isLoaded("ldlib2")) {
-            iExtensionPoint = LDLib2Util.createConfigScreenFactory();
-        } else {
-            iExtensionPoint = ConfigurationScreen::new;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+
+public final class GachaAddictionClient implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+        GachaTypeClients.init();
+        OpenGachaScreenPayload.registerClientReceiver();
+        SyncGachaaDataPayload.registerClientReceiver();
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES)
+                .registerReloadListener(new ConfigDataReloadListener());
+    }
+
+    /**
+     * Fabric 要求重载监听器带有唯一 id，这里包一层
+     * {@link GachaaAdictionConfigData}。
+     */
+    private static final class ConfigDataReloadListener implements IdentifiableResourceReloadListener {
+        private static final Identifier ID =
+                Identifier.fromNamespaceAndPath(GachaAddiction.MODID, "config_data");
+
+        @Override
+        public Identifier getFabricId() {
+            return ID;
         }
-        container.registerExtensionPoint(IConfigScreenFactory.class, iExtensionPoint);
+
+        @Override
+        public CompletableFuture<Void> reload(PreparableReloadListener.SharedState sharedState,
+                                              Executor backgroundExecutor,
+                                              PreparableReloadListener.PreparationBarrier barrier,
+                                              Executor gameExecutor) {
+            return GachaaAdictionConfigData.INSTANCE.reload(sharedState, backgroundExecutor, barrier, gameExecutor);
+        }
     }
 }

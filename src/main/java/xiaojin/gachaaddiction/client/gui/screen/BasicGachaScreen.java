@@ -3,25 +3,24 @@ package xiaojin.gachaaddiction.client.gui.screen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
-import xiaojin.gachaaddiction.config.GachaAddictionConfig;
+import xiaojin.gachaaddiction.GachaAddictionConfig;
 import xiaojin.gachaaddiction.api.ItemStackEntry;
 import xiaojin.gachaaddiction.api.RewardData;
-import xiaojin.gachaaddiction.api.client.ReelHost;
 import xiaojin.gachaaddiction.config.ClientConfig;
 
 import java.util.*;
 import java.util.function.BiPredicate;
 import java.util.function.BinaryOperator;
 
-public abstract class BasicGachaScreen extends Screen implements ReelHost {
+public abstract class BasicGachaScreen extends Screen {
     protected final ClientConfig clientConfig = GachaAddictionConfig.CLIENT;
     protected final boolean isMerge = clientConfig.mergeItem.get();
     protected final boolean raritySorting = clientConfig.raritySorting.get();
     protected final @Nullable Screen originalScreen;
-    protected final List<@Nullable ResourceLocation> lootTableId = new ArrayList<>();
+    protected final List<@Nullable Identifier> lootTableId = new ArrayList<>();
     protected final List<ItemStackEntry> itemStackEntries = new ArrayList<>();
     protected final List<RewardData> rewards = new ArrayList<>();
     private boolean isReturnOriginalScreen = true;
@@ -31,7 +30,7 @@ public abstract class BasicGachaScreen extends Screen implements ReelHost {
     protected BasicGachaScreen(
             Component title,
             @Nullable Screen originalScreen,
-            List<@Nullable ResourceLocation> lootTableId,
+            List<@Nullable Identifier> lootTableId,
             List<ItemStackEntry> itemStackEntries) {
         super(title);
         this.originalScreen = originalScreen;
@@ -116,7 +115,7 @@ public abstract class BasicGachaScreen extends Screen implements ReelHost {
         return itemStackEntries;
     }
 
-    public List<@Nullable ResourceLocation> getLootTableId() {
+    public List<@Nullable Identifier> getLootTableId() {
         return lootTableId;
     }
 
@@ -138,11 +137,6 @@ public abstract class BasicGachaScreen extends Screen implements ReelHost {
         if (!clientConfig.rewardSoundEffectsOptimize.get()) return true;
         if (completeSoundPlayedThisFrame) return false;
         completeSoundPlayedThisFrame = true;
-        return true;
-    }
-
-    @Override
-    public boolean tryClaimPassSound() {
         return true;
     }
 }

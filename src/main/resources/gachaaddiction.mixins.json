@@ -3,26 +3,18 @@
   "package": "xiaojin.gachaaddiction.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "entity.AbstractContainerMenuMixin",
-    "entity.AbstractMinecartContainerMixin",
-    "block.ChestBlock_2_1Mixin",
-    "entity.MenuTypeMixin",
-    "block.RandomizableContainerBlockEntityMixin",
-    "entity.ServerPlayerMixin",
-    "accessor.LanguageProviderAccessor",
-    "accessor.LootItemAccessor",
+    "AbstractContainerMenuMixin",
+    "AbstractMinecartContainerMixin",
+    "ChestBlock_2_1Mixin",
+    "RandomizableContainerBlockEntityMixin",
+    "ServerPlayerMixin",
     "accessor.LootPoolAccessor",
-    "accessor.LootPoolSingletonContainerAccessor",
-    "accessor.LootTableAccessor",
+    "accessor.LootTableAccessor"
+  ],
+  "client": [
+    "accessor.ScreenAccessor",
     "client.ClientPacketListenerMixin",
-    "compat.ftb.FTBquestsNetClientMixin",
-    "compat.ftb.LootCrateItemMixin",
-    "compat.ftb.LootRewardMixin",
-    "compat.lootr.LootrInventoryMixin",
-    "compat.lootr.LootrSavedDataMixin",
-    "compat.treasurebags.LootContainerItemMixin",
-    "compat.treasurebags.TreasureBagItemMixin",
-    "compat.lootbundles.LootBundleMixin"
+    "client.GuiMixin"
   ],
   "injectors": {
     "defaultRequire": 1
@@ -30,9 +22,6 @@
   "overwrites": {
     "requireAnnotations": true
   },
-  "client": [
-    "client.MinecraftMixin"
-  ],
   "mixinextras": {
     "minVersion": "0.5.0"
   }

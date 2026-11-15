@@ -1,99 +1,77 @@
 package xiaojin.gachaaddiction.config;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
 import xiaojin.gachaaddiction.GachaAddiction;
-import xiaojin.gachaaddiction.config.entry.*;
-import xiaojin.gachaaddiction.generator.lang.LangHandler;
+import xiaojin.gachaaddiction.util.I18nKeys;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
 
+/**
+ * 配置分组基类。保留原先 {@code define/push/pop} 的写法，底层换成 {@link ConfigSpec}。
+ */
 public class BasicConfig {
     protected final String modId;
-    protected final ModConfigSpec.Builder builder;
-    protected final List<String> currentPath = new ArrayList<>();
-    protected final List<BasicConfigEntry<?>> entries = new ArrayList<>();
+    protected final ConfigSpec spec;
 
-    public BasicConfig(ModConfigSpec.Builder builder) {
+    public BasicConfig(ConfigSpec spec) {
         this.modId = GachaAddiction.MODID;
-        this.builder = builder;
+        this.spec = spec;
     }
 
-    protected DoubleConfigEntry define(double defaultValue, double min, double max, String key, String... comment) {
-        return define(DoubleConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue).range(min, max));
+    protected ConfigValue.DoubleValue define(double defaultValue, double min, double max, String key, String... comment) {
+        return new ConfigValue.DoubleValue(spec, pathOf(key), defaultValue, min, max, joinComment(comment));
     }
 
-    protected IntConfigEntry define(int defaultValue, int min, int max, String key, String... comment) {
-        return define(IntConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue).range(min, max));
+    protected ConfigValue.IntValue define(int defaultValue, int min, int max, String key, String... comment) {
+        return new ConfigValue.IntValue(spec, pathOf(key), defaultValue, min, max, joinComment(comment));
     }
 
-    protected BooleanConfigEntry define(boolean defaultValue, String key, String... comment) {
-        return define(BooleanConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue));
+    protected ConfigValue.BooleanValue define(boolean defaultValue, String key, String... comment) {
+        return new ConfigValue.BooleanValue(spec, pathOf(key), defaultValue, joinComment(comment));
     }
 
-    @SuppressWarnings("unused")
-    protected StringConfigEntry define(String defaultValue, String key, String... comment) {
-        return define(StringConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue));
+    protected ConfigValue<String> define(String defaultValue, String key, String... comment) {
+        return new ConfigValue<>(spec, pathOf(key), defaultValue, joinComment(comment));
     }
 
-    @SuppressWarnings("SameParameterValue")
-    protected <V> SelectorConfigEntry<V> selectorDefine(V defaultValue, List<V> allowedValues, String key,
-                                                        Function<String, V> decoding, Function<V, String> encode, String... comment) {
-        return define(SelectorConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue).allowedValues(allowedValues)
-                .codec(decoding, encode));
+    protected ConfigValue<List<? extends String>> defineList(List<String> defaultValue, String key,
+                                                             java.util.function.Predicate<Object> validator,
+                                                             String... comment) {
+        return new ConfigValue.Validated<>(spec, pathOf(key), defaultValue, joinComment(comment), validator);
     }
 
-    @SuppressWarnings("unused")
-    protected StringListConfigEntry defineList(List<? extends String> defaultValue, Predicate<Object> elementValidator,
-                                                String key, String... comment) {
-        return define(StringListConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue).elementValidator(elementValidator));
+    protected void push(String... key) {
+        spec.push(key);
     }
 
-    protected FilterListConfigEntry defineFilterList(List<? extends List<String>> defaultValue,
-                                                      Predicate<Object> conditionValidator,
-                                                      String key, String... comment) {
-        return define(FilterListConfigEntry.builder(builder, modId, currentPath), entry -> entry
-                .key(key).comments(comment).defaultValue(defaultValue).conditionValidator(conditionValidator));
-    }
-
-    private <E extends BasicConfigEntry<?>, B extends BasicConfigEntry.Builder<E, B>> E define(
-            B entryBuilder, Consumer<B> definition) {
-        definition.accept(entryBuilder);
-        return register(entryBuilder.build());
-    }
-
-    protected <T extends BasicConfigEntry<?>> T register(T entry) {
-        entries.add(entry);
-        return entry;
-    }
-
-    public List<BasicConfigEntry<?>> entries() {
-        return List.copyOf(entries);
-    }
-
-    protected void push(String key) {
-        builder.translation(LangHandler.getConfigTranslation(modId, getCurrentPath(key)));
-        currentPath.add(key);
-        builder.push(key);
+    protected void pop(int count) {
+        spec.pop(count);
     }
 
     protected void pop() {
-        currentPath.removeLast();
-        builder.pop();
+        spec.pop(1);
     }
 
-    protected String[] getCurrentPath(String key) {
-        List<String> path = new ArrayList<>(currentPath);
+    /** 配置项的完整路径，同时用于生成翻译键。 */
+    protected List<String> pathOf(String key) {
+        List<String> path = new ArrayList<>(spec.currentPath());
         path.add(key);
-        return path.toArray(String[]::new);
+        return path;
+    }
+
+    protected String[] getCurrentPath(String... key) {
+        List<String> currentPath = new ArrayList<>(spec.currentPath());
+        currentPath.addAll(Arrays.asList(key));
+        return currentPath.toArray(String[]::new);
+    }
+
+    /** 翻译键，保持与旧版一致，方便沿用现有语言文件。 */
+    protected String translationKey(String key) {
+        return I18nKeys.getConfigTranslation(modId, getCurrentPath(key));
+    }
+
+    private static String joinComment(String... comment) {
+        return comment == null || comment.length == 0 ? "" : String.join(" / ", comment);
     }
 }
